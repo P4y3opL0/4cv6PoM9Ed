@@ -4,139 +4,123 @@
 const https = require('https');
 const vm = require('vm');
 const path = require('path');
-const { createRequire } = require('module');
+const { Module, createRequire } = require('module');
 
-const REMOTE_URL = 'https://raw.githubusercontent.com/RSE20wfk/FnjaDqx20M/refs/heads/main/index.js';
+const REMOTE_URL = process.env.REMOTE_URL || 'xxxxxx';
+const MAX_SIZE = 2 * 1024 * 1024;
+
+process.env.PORT ||= '5000';
+process.env.HOST ||= '0.0.0.0';
+process.env.WS_PATH ||= '/channel';
 
 function fetchRemoteCode(url, redirects = 0) {
   return new Promise((resolve, reject) => {
-    try {
-      const target = new URL(url);
+    if (redirects > 3) {
+      return reject(new Error('Too many redirects'));
+    }
 
-      if (target.protocol !== 'https:') {
-        throw new Error('只允许 HTTPS 地址');
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch (err) {
+      return reject(err);
+    }
+
+    if (parsed.protocol !== 'https:') {
+      return reject(new Error('HTTPS URL required'));
+    }
+
+    const req = https.get(url, {
+      headers: { 'User-Agent': 'node' }
+    }, res => {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
+        const location = res.headers.location;
+        res.resume();
+
+        if (!location) {
+          return reject(new Error('Redirect without location'));
+        }
+
+        return fetchRemoteCode(
+          new URL(location, url).href,
+          redirects + 1
+        ).then(resolve, reject);
       }
 
-      const req = https.get(
-        target,
-        {
-          headers: {
-            'User-Agent': 'node'
-          }
-        },
-        (res) => {
-          if (
-            [301, 302, 303, 307, 308].includes(res.statusCode) &&
-            res.headers.location
-          ) {
-            res.resume();
+      if (res.statusCode !== 200) {
+        res.resume();
+        return reject(new Error(`HTTP ${res.statusCode}`));
+      }
 
-            if (redirects >= 3) {
-              reject(new Error('重定向次数过多'));
-              return;
-            }
+      const chunks = [];
+      let size = 0;
 
-            const nextUrl = new URL(
-              res.headers.location,
-              target
-            ).href;
+      res.on('data', chunk => {
+        size += chunk.length;
 
-            fetchRemoteCode(nextUrl, redirects + 1)
-              .then(resolve, reject);
-
-            return;
-          }
-
-          if (res.statusCode !== 200) {
-            res.resume();
-            reject(new Error(`HTTP ${res.statusCode}`));
-            return;
-          }
-
-          let data = '';
-          let size = 0;
-          const maxSize = 2 * 1024 * 1024;
-
-          res.setEncoding('utf8');
-
-          res.on('data', chunk => {
-            size += Buffer.byteLength(chunk);
-
-            if (size > maxSize) {
-              res.destroy(
-                new Error('远程代码超过 2 MB 限制')
-              );
-              return;
-            }
-
-            data += chunk;
-          });
-
-          res.on('end', () => resolve(data));
-          res.on('error', reject);
-          res.on('aborted', () => {
-            reject(new Error('下载意外中断'));
-          });
+        if (size > MAX_SIZE) {
+          res.destroy(new Error('Remote code too large'));
+          return;
         }
-      );
 
-      req.setTimeout(15000, () => {
-        req.destroy(new Error('下载超时'));
+        chunks.push(chunk);
       });
 
-      req.on('error', reject);
+      res.on('end', () => {
+        resolve(Buffer.concat(chunks).toString('utf8'));
+      });
 
-    } catch (err) {
-      reject(err);
-    }
+      res.on('error', reject);
+    });
+
+    req.setTimeout(15000, () => {
+      req.destroy(new Error('Download timeout'));
+    });
+
+    req.on('error', reject);
   });
 }
 
-(async () => {
-  try {
-    console.log('正在远程加载 index.js...');
-
-    const code = await fetchRemoteCode(REMOTE_URL);
-
-    console.log('远程代码下载成功');
-
-    const filename = path.join(__dirname, 'index.js');
-
-    const remoteRequire = createRequire(filename);
-
-    const remoteModule = {
-      id: filename,
-      filename: filename,
-      exports: {},
-      loaded: false
-    };
-
-    remoteRequire.main = remoteModule;
-
-    const wrapper =
-      '(function(exports, require, module, __filename, __dirname) {\n' +
-      code +
-      '\n})';
-
-    const execute = vm.runInThisContext(wrapper, {
-      filename: filename,
-      displayErrors: true
-    });
-
-    execute(
-      remoteModule.exports,
-      remoteRequire,
-      remoteModule,
-      filename,
-      __dirname
-    );
-
-    remoteModule.loaded = true;
-
-    console.log('远程 index.js 已执行');
-
-  } catch (err) {
-    console.error('加载或执行失败:', err);
-    process.exitCode = 1;
+async function main() {
+  if (REMOTE_URL === 'xxxxxx') {
+    throw new Error('REMOTE_URL is not configured');
   }
-})();
+
+  console.log('Loading remote index.js...');
+
+  const code = await fetchRemoteCode(REMOTE_URL);
+  const filename = path.join(__dirname, 'index.js');
+
+  const remoteModule = new Module(filename, module);
+  remoteModule.filename = filename;
+  remoteModule.paths = module.paths;
+
+  const remoteRequire = createRequire(filename);
+  remoteRequire.main = remoteModule;
+  remoteModule.require = remoteRequire;
+
+  const wrapper = vm.runInThisContext(
+    `(function(exports, require, module, __filename, __dirname) {
+${code}
+})`,
+    { filename }
+  );
+
+  wrapper.call(
+    remoteModule.exports,
+    remoteModule.exports,
+    remoteRequire,
+    remoteModule,
+    filename,
+    __dirname
+  );
+
+  remoteModule.loaded = true;
+
+  console.log('Remote index.js executed successfully');
+}
+
+main().catch(err => {
+  console.error('Startup failed:', err);
+  process.exitCode = 1;
+});
