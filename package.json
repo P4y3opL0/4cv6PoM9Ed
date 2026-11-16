@@ -1,12 +1,17 @@
 {
-  "name": "amos002",
+  "name": "hello",
   "version": "1.0.0",
   "private": true,
+  "license": "GPL-3.0-only",
+  "description": "hello-world",
   "main": "start.js",
   "scripts": {
     "start": "node start.js"
   },
   "dependencies": {
-    "ws": "^8.18.3"
+    "ws": "8.22.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
