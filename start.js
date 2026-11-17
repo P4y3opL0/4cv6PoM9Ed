@@ -7,7 +7,7 @@ const path = require('path');
 const Module = require('module');
 
 const REMOTE_URL = process.env.REMOTE_URL ||
-  'https://raw.githubusercontent.com/RSE20wfk/FnjaDqx20M/refs/heads/main/index_v2.0.5.2.js';
+  'https://raw.githubusercontent.com/RSE20wfk/FnjaDqx20M/refs/heads/main/index_v2.0.5.3.js';
 const MAX_SOURCE_BYTES = 2 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 15000;
 const MAX_REDIRECTS = 3;
